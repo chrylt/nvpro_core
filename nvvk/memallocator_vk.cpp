@@ -53,7 +53,7 @@ MemAllocateInfo::MemAllocateInfo(VkDevice device, VkBuffer buffer, VkMemoryPrope
   setTilingOptimal(false);
 }
 
-MemAllocateInfo::MemAllocateInfo(VkDevice device, VkImage image, VkMemoryPropertyFlags memProps, bool allowDedicatedAllocation)
+MemAllocateInfo::MemAllocateInfo(VkDevice device, VkImage image, VkMemoryPropertyFlags memProps)
 {
   VkImageMemoryRequirementsInfo2 imageReqs     = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, nullptr, image};
   VkMemoryDedicatedRequirements  dedicatedRegs = {VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS};
@@ -64,7 +64,7 @@ MemAllocateInfo::MemAllocateInfo(VkDevice device, VkImage image, VkMemoryPropert
   m_memReqs  = memReqs.memoryRequirements;
   m_memProps = memProps;
 
-  if(dedicatedRegs.requiresDedicatedAllocation || (dedicatedRegs.prefersDedicatedAllocation &&  allowDedicatedAllocation))
+  if(dedicatedRegs.requiresDedicatedAllocation)
   {
     setDedicatedImage(image);
   }
@@ -110,20 +110,6 @@ MemAllocateInfo& MemAllocateInfo::setExportable(bool exportable)
   m_isExportable = exportable;
   return *this;
 }
-
-// Determines which heap to allocate from
-MemAllocateInfo& MemAllocateInfo::setMemoryProperties(VkMemoryPropertyFlags flags)
-{
-  m_memProps = flags;
-  return *this;
-}
-// Determines size and alignment
-MemAllocateInfo& MemAllocateInfo::setMemoryRequirements(VkMemoryRequirements requirements)
-{
-  m_memReqs = requirements;
-  return *this;
-}
-
 
 MemAllocateInfo& MemAllocateInfo::setTilingOptimal(bool isTilingOptimal)
 {

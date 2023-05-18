@@ -40,19 +40,9 @@ set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "_cmake")
 # https://cmake.org/cmake/help/latest/policy/CMP0072.html
 set(OpenGL_GL_PREFERENCE GLVND)
 
+set(SUPPORT_SOCKETS OFF CACHE BOOL "add a socket protocol so samples can be controled remotely")
 set(SUPPORT_NVTOOLSEXT OFF CACHE BOOL "enable NVToolsExt for custom NSIGHT markers")
-set(NSIGHT_AFTERMATH_SDK "" CACHE PATH "Point to top directory of nSight Aftermath SDK")
-
-# We use the presence of NSIGHT_AFTERMATH_SDK as enable-switch for Aftermath
-if (NOT NSIGHT_AFTERMATH_SDK)
-	if (DEFINED ENV{NSIGHT_AFTERMATH_SDK})
-	  set(NSIGHT_AFTERMATH_SDK  $ENV{NSIGHT_AFTERMATH_SDK})
-	endif()
-endif()
-if (NSIGHT_AFTERMATH_SDK)
-  message(STATUS "Enabling nSight Aftermath; NSIGHT_AFTERMATH_SDK provided as ${NSIGHT_AFTERMATH_SDK}")
-  set(SUPPORT_AFTERMATH ON)
-endif()
+set(SUPPORT_AFTERMATH OFF CACHE BOOL "enable nSight Aftermath")
 
 if(WIN32)
   set( MEMORY_LEAKS_CHECK OFF CACHE BOOL "Check for Memory leaks" )
@@ -92,9 +82,7 @@ else ()
   set(ARCH "x86" CACHE STRING "CPU Architecture")
 endif()
 
-if(NOT OUTPUT_PATH)
-  set(OUTPUT_PATH ${BASE_DIRECTORY}/bin_${ARCH} CACHE PATH "Directory where outputs will be stored")
-endif()
+set(OUTPUT_PATH ${BASE_DIRECTORY}/bin_${ARCH} CACHE PATH "Directory where outputs will be stored")
 
 # Set the default build to Release.  Note this doesn't do anything for the VS
 # default build target.
@@ -315,6 +303,55 @@ macro(_optional_package_FreeImage)
   endif(FREEIMAGE_FOUND)
 endmacro(_optional_package_FreeImage)
 
+
+#####################################################################################
+# package for Sockets: to allow UDP/TCP IP connections
+#
+macro(_add_package_Sockets)
+  Message(STATUS "--> using package Sockets")
+  set(SOCKETS_PATH "${BASE_DIRECTORY}/nvpro_core/nvsockets")
+  get_directory_property(hasParent PARENT_DIRECTORY)
+  if(hasParent)
+    set( USING_SOCKETS "YES" PARENT_SCOPE) # PARENT_SCOPE important to have this variable passed to parent. Here we want to notify that something used the Vulkan package
+  else()
+    set( USING_SOCKETS "YES")
+  endif()
+  add_definitions(-DNVP_SUPPORTS_SOCKETS)
+  set(SOCKETS_H
+    ${SOCKETS_PATH}/socketclient.hpp
+    ${SOCKETS_PATH}/socketsamplemessages.hpp
+    ${SOCKETS_PATH}/socketserver.hpp
+    # ${SOCKETS_PATH}/nvpwindow_socket.hpp
+    ${SOCKETS_PATH}/cthread_s.hpp
+  )
+  set(SOCKETS_CPP
+    ${SOCKETS_PATH}/socketclient.cpp
+    ${SOCKETS_PATH}/socketserver.cpp
+    ${SOCKETS_PATH}/socketsamplemessages.cpp
+    ${SOCKETS_PATH}/cthread_s.cpp
+  )
+  source_group(sockets FILES ${SOCKETS_H})
+if(WIN32)
+  LIST(APPEND LIBRARIES_OPTIMIZED ws2_32 )
+  LIST(APPEND LIBRARIES_DEBUG ws2_32 )
+  #TODO: for Linux and Android, too !
+endif()
+  LIST(APPEND PACKAGE_SOURCE_FILES ${SOCKETS_H} )
+  # source_group(Sockets FILES ${SOCKETS_CPP})
+  # LIST(APPEND PACKAGE_SOURCE_FILES ${SOCKETS_CPP} )
+  include_directories(${SOCKETS_PATH})
+endmacro(_add_package_Sockets)
+
+# for the nvpro_core library
+macro(_optional_package_Sockets)
+  if(USING_SOCKETS)
+    Message("NOTE: Package for remote control via Sockets is ON")
+    _add_package_Sockets()
+    source_group(Sockets FILES ${SOCKETS_CPP})
+    LIST(APPEND PACKAGE_SOURCE_FILES ${SOCKETS_CPP} )
+  endif(USING_SOCKETS)
+endmacro(_optional_package_Sockets)
+
 #####################################################################################
 # Optional OptiX package
 #
@@ -506,18 +543,24 @@ endmacro(_optional_package_DirectX11)
 # Optional DirectX12 package
 #
 macro(_add_package_DirectX12)
-  Message(STATUS "--> using package DirectX 12")
-  get_directory_property(hasParent PARENT_DIRECTORY)
-  if(hasParent)
-    set( USING_DIRECTX12 "YES" PARENT_SCOPE) # PARENT_SCOPE important to have this variable passed to parent. Here we want to notify that something used the DX12 package
-  else()
-    set( USING_DIRECTX12 "YES")
-  endif()
-  add_definitions(-DNVP_SUPPORTS_DIRECTX12)
-  include_directories(${BASE_DIRECTORY}/nvpro_core/third_party/dxc/Include)
-  include_directories(${BASE_DIRECTORY}/nvpro_core/third_party/dxh/include/directx)
-  LIST(APPEND LIBRARIES_OPTIMIZED dxgi.lib d3d12.lib)
-  LIST(APPEND LIBRARIES_DEBUG dxgi.lib d3d12.lib)
+  find_package(DX12SDK REQUIRED)
+  if(DX12SDK_FOUND)
+      Message(STATUS "--> using package DirectX 12")
+      get_directory_property(hasParent PARENT_DIRECTORY)
+      if(hasParent)
+        set( USING_DIRECTX12 "YES" PARENT_SCOPE) # PARENT_SCOPE important to have this variable passed to parent. Here we want to notify that something used the DX12 package
+      else()
+        set( USING_DIRECTX12 "YES")
+      endif()
+      add_definitions(-DNVP_SUPPORTS_DIRECTX12)
+      include_directories(${DX12SDK_INCLUDE_DIR})
+      include_directories(${BASE_DIRECTORY}/nvpro_core/third_party/dxc/Include)
+      include_directories(${BASE_DIRECTORY}/nvpro_core/third_party/dxh/include/directx)
+      LIST(APPEND LIBRARIES_OPTIMIZED ${DX12SDK_D3D_LIBRARIES})
+      LIST(APPEND LIBRARIES_DEBUG ${DX12SDK_D3D_LIBRARIES})
+ else()
+     Message(STATUS "--> NOT using package DirectX12")
+ endif()
 endmacro()
 # this macro is needed for the samples to add this package, although not needed
 # this happens when the nvpro_core library was built with these stuff in it
@@ -634,12 +677,12 @@ macro(_add_package_NsightAftermath)
 		if (DEFINED ENV{NSIGHT_AFTERMATH_SDK})
 		  set(NSIGHT_AFTERMATH_SDK  $ENV{NSIGHT_AFTERMATH_SDK} CACHE STRING "Path to the Aftermath SDK")
 		else()
-		  message(WARNING "--> Download nSight Aftermath from from https://developer.nvidia.com/nsight-aftermath")
-		  message(WARNING "--> Unzip it to a folder. Then set NSIGHT_AFTERMATH_SDK env. variable to the top of the unpacked aftermath directory before running CMake.")
+		  message("Download nSight Aftermath from from https://developer.nvidia.com/nsight-aftermath")
+		  message("Unzip it to a folder. Then set NSIGHT_AFTERMATH_SDK env. variable to the top of the unpacked aftermath directory before running CMake.")
 		endif()
 	endif()
 
-	message(STATUS "--> Looking for nSight Aftermath at: ${NSIGHT_AFTERMATH_SDK}")
+	message("Looking for nSight Aftermath at: ${NSIGHT_AFTERMATH_SDK}")
 
     find_package(NsightAftermath)
 
@@ -733,17 +776,9 @@ macro(_add_package_KTX)
     LIST(APPEND LIBRARIES_OPTIMIZED basisu)
     LIST(APPEND LIBRARIES_DEBUG basisu)
     set_property(TARGET basisu PROPERTY FOLDER "ThirdParty")
-    
-    # Set up linking between basisu and its dependencies, so that we always get
-    # a correct linking order on Linux:
-    if(TARGET libzstd_static)
-      target_link_libraries(basisu PUBLIC libzstd_static)
-    else()
-      # If Zstandard isn't included, also turn off Zstd support in Basis:
+    # If Zstandard isn't included, also turn off Zstd support in Basis:
+    if(NOT TARGET libzstd_static)
       target_compile_definitions(basisu PRIVATE BASISD_SUPPORT_KTX2_ZSTD=0)
-    endif()
-    if(TARGET zlibstatic)
-      target_link_libraries(basisu PUBLIC zlibstatic)
     endif()
   endif()
 endmacro()
@@ -1047,6 +1082,11 @@ macro(_add_nvpro_core_lib)
   endif()
   if(USING_VULKANSDK OR NOT VULKANSDK_FOUND)
     _optional_package_VulkanSDK()
+  endif()
+  # if socket system required in samples, add the package
+  if(SUPPORT_SOCKETS)
+    Message("NOTE: Package for remote control via Sockets is ON")
+    _add_package_Sockets()
   endif()
   # finish with another part (also used by cname for the nvpro_core)
   _process_shared_cmake_code()

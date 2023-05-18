@@ -39,6 +39,7 @@ void ParameterList::tokenizeString(std::string& content, std::vector<const char*
   bool inQuotes  = false;
   bool inComment = false;
   bool wasQuote  = false;
+  bool isEscape  = false;
   bool wasEscape = false;
 
   for(size_t i = 0; i < content.size(); i++)
@@ -307,7 +308,6 @@ bool ParameterList::applyParameters(uint32_t     argc,
         break;
         case TYPE_TRIGGER: {
         }
-        break;
       }
 
       if(param.callback)
@@ -384,7 +384,7 @@ void ParameterList::print() const
 
   // Print underline. Format: -----
   LOGI(" ");
-  for(uint32_t i = 0; i < maxParamNameLength + 23; i++)
+  for(int i = 0; i < maxParamNameLength + 23; i++)
   {
     LOGI("-");
   }

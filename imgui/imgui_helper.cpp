@@ -20,6 +20,7 @@
 #define GLFW_INCLUDE_NONE
 #include "imgui_helper.h"
 #include "backends/imgui_impl_glfw.h"
+#include "nvmath/nvmath.h"
 #include <GLFW/glfw3.h>
 #include <math.h>
 
@@ -48,6 +49,35 @@ void Deinit()
   ImGui::DestroyContext(nullptr);
 }
 
+void InitGLFW(GLFWwindow* window, int width, int height, void* userData, FontMode fontmode)
+{
+  ImGui::CreateContext();
+  setFonts(fontmode);
+  auto& imgui_io       = ImGui::GetIO();
+  imgui_io.IniFilename = nullptr;  // Avoiding the INI file
+  imgui_io.LogFilename = nullptr;
+  imgui_io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+  imgui_io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;      // Enable Docking
+  imgui_io.DisplaySize = ImVec2(float(width), float(height));
+
+  // Scale style sizes for high-DPI monitors
+  ImGuiStyle& imgui_style = ImGui::GetStyle();
+  imgui_style.ScaleAllSizes(getDPIScale());
+
+  ImGui_ImplGlfw_InitForOther(window, true);
+}
+
+void NewFrameGLFW()
+{
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+}
+
+void DeinitGLFW()
+{
+  ImGui::DestroyContext(nullptr);
+  ImGui_ImplGlfw_Shutdown();
+}
 
 bool Combo(const char* label, size_t numEnums, const Enum* enums, void* valuePtr, ImGuiComboFlags flags, ValueType valueType, bool* valueChanged)
 {
@@ -78,12 +108,6 @@ bool Combo(const char* label, size_t numEnums, const Enum* enums, void* valuePtr
       default:
         break;
     }
-  }
-
-  if(!found)
-  {
-    assert(!"No such value in combo!");
-    return false;
   }
 
   if(ImGui::BeginCombo(label, enums[idx].name.c_str(), flags))  // The second parameter is the label previewed before opening the combo.
@@ -185,7 +209,7 @@ void setStyle(bool useLinearColor)
   ImGuiStyle& style                  = ImGui::GetStyle();
   style.WindowRounding               = 0.0f;
   style.WindowBorderSize             = 0.0f;
-  style.ColorButtonPosition          = ImGuiDir_Right;
+  style.ColorButtonPosition          = ImGuiDir_Left;
   style.FrameRounding                = 2.0f;
   style.FrameBorderSize              = 1.0f;
   style.GrabRounding                 = 4.0f;
@@ -586,7 +610,7 @@ void Panel::Begin(Side side /*= Side::Right*/, float alpha /*= 0.5f*/, char* nam
     // Slitting all 4 directions, targetting (320 pixel * DPI) panel width, (180 pixel * DPI) panel height.
     const float xRatio = nvmath::nv_clamp<float>(320.0f * getDPIScale() / viewport->WorkSize[0], 0.01f, 0.499f);
     const float yRatio = nvmath::nv_clamp<float>(180.0f * getDPIScale() / viewport->WorkSize[1], 0.01f, 0.499f);
-    ImGuiID     id_left, id_right, id_up, id_down;
+    ImGuiID id_left, id_right, id_up, id_down;
 
     // Note, for right, down panels, we use the n / (1 - n) formula to correctly split the space remaining from the left, up panels.
     id_left  = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, xRatio, nullptr, &dock_main_id);
@@ -681,6 +705,7 @@ void ImGui::PlotMultiEx(const char* label, int num_datas, ImPlotMulti* datas, co
 
       bool type_line = (cur_data.plot_type == ImGuiPlotType_Lines) || (cur_data.plot_type == (ImGuiPlotType)ImGuiPlotType_Area);
 
+      int res_w      = ImMin((int)frame_size.x, cur_data.values_count) + (type_line ? -1 : 0);
       int item_count = cur_data.values_count + (type_line ? -1 : 0);
 
       // Tooltip on hover
@@ -711,12 +736,12 @@ void ImGui::PlotMultiEx(const char* label, int num_datas, ImPlotMulti* datas, co
     const float inv_scale =
         (cur_data.scale_min == cur_data.scale_max) ? 0.0f : (1.0f / (cur_data.scale_max - cur_data.scale_min));
 
-    float v0 = cur_data.data[(0 + cur_data.values_offset) % cur_data.values_count];
-    float t0 = 0.0f;
-    ImVec2 tp0 = ImVec2(t0, 1.0f - ImSaturate((v0 - cur_data.scale_min) * inv_scale));  // Point in the normalized space of our target rectangle
-    float histogram_zero_line_t = (cur_data.scale_min * cur_data.scale_max < 0.0f) ?
-                                      (-cur_data.scale_min * inv_scale) :
-                                      (cur_data.scale_min < 0.0f ? 0.0f : 1.0f);  // Where does the zero line stands
+    float  v0                    = cur_data.data[(0 + cur_data.values_offset) % cur_data.values_count];
+    float  t0                    = 0.0f;
+    ImVec2 tp0                   = ImVec2(t0, 1.0f - ImSaturate((v0 - cur_data.scale_min) * inv_scale));  // Point in the normalized space of our target rectangle
+    float  histogram_zero_line_t = (cur_data.scale_min * cur_data.scale_max < 0.0f) ?
+                                       (-cur_data.scale_min * inv_scale) :
+                                       (cur_data.scale_min < 0.0f ? 0.0f : 1.0f);  // Where does the zero line stands
 
     const ImU32 col_base   = ColorConvertFloat4ToU32(cur_data.color);
     const ImU32 col_base_a = ColorConvertFloat4ToU32(
@@ -764,70 +789,4 @@ void ImGui::PlotMultiEx(const char* label, int num_datas, ImPlotMulti* datas, co
 
   if(label_size.x > 0.0f)
     RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, inner_bb.Min.y), label);
-}
-
-
-bool ImGuiH::azimuthElevationSliders(nvmath::vec3f& direction, bool negative, bool yIsUp /*=true*/)
-{
-  nvmath::vec3f normalized_dir = normalize(direction);
-  if(negative)
-  {
-    normalized_dir = -normalized_dir;
-  }
-
-  double       azimuth;
-  double       elevation;
-  const double min_azimuth   = -180.0;
-  const double max_azimuth   = 180.0;
-  const double min_elevation = -90.0;
-  const double max_elevation = 90.0;
-
-  if(yIsUp)
-  {
-    azimuth   = nv_to_deg * (atan2(normalized_dir.z, normalized_dir.x));
-    elevation = nv_to_deg * (asin(normalized_dir.y));
-  }
-  else
-  {
-    azimuth   = nv_to_deg * (atan2(normalized_dir.y, normalized_dir.x));
-    elevation = nv_to_deg * (asin(normalized_dir.z));
-  }
-
-
-  bool changed = false;
-  changed |= PropertyEditor::entry("Azimuth", [&]() {
-    return ImGui::SliderScalar("Azimuth", ImGuiDataType_Double, &azimuth, &min_azimuth, &max_azimuth, "%.1f deg",
-                               ImGuiSliderFlags_NoRoundToFormat);
-  });
-  changed |= PropertyEditor::entry("Elevation", [&]() {
-    return ImGui::SliderScalar("Elevation", ImGuiDataType_Double, &elevation, &min_elevation, &max_elevation,
-                               "%.1f deg", ImGuiSliderFlags_NoRoundToFormat);
-  });
-
-  if(changed)
-  {
-    azimuth              = nv_to_rad * (azimuth);
-    elevation            = nv_to_rad * (elevation);
-    double cos_elevation = cos(elevation);
-
-    if(yIsUp)
-    {
-      direction.y = static_cast<float>(sin(elevation));
-      direction.x = static_cast<float>(cos(azimuth) * cos_elevation);
-      direction.z = static_cast<float>(sin(azimuth) * cos_elevation);
-    }
-    else
-    {
-      direction.z = static_cast<float>(sin(elevation));
-      direction.x = static_cast<float>(cos(azimuth) * cos_elevation);
-      direction.y = static_cast<float>(sin(azimuth) * cos_elevation);
-    }
-
-    if(negative)
-    {
-      direction = -direction;
-    }
-  }
-
-  return changed;
 }

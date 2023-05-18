@@ -28,7 +28,6 @@
 #include "imgui_internal.h"
 
 #include <nvpwindow.hpp>
-#include "nvmath/nvmath.h"
 
 #include <algorithm>
 #include <limits>
@@ -309,12 +308,12 @@ inline bool key_button(int button, int action, int mods)
   }
 
   auto& io = ImGui::GetIO();
-  io.AddKeyEvent(ImGuiKey::ImGuiMod_Ctrl, (mods & NVPWindow::KMOD_CONTROL) != 0);
-  io.AddKeyEvent(ImGuiKey::ImGuiMod_Shift, (mods & NVPWindow::KMOD_SHIFT) != 0);
-  io.AddKeyEvent(ImGuiKey::ImGuiMod_Alt, (mods & NVPWindow::KMOD_ALT) != 0);
-  io.AddKeyEvent(ImGuiKey::ImGuiMod_Super, (mods & NVPWindow::KMOD_SUPER) != 0);
+  io.AddKeyEvent(ImGuiKey_ModCtrl, (mods & NVPWindow::KMOD_CONTROL) != 0);
+  io.AddKeyEvent(ImGuiKey_ModShift, (mods & NVPWindow::KMOD_SHIFT) != 0);
+  io.AddKeyEvent(ImGuiKey_ModAlt, (mods & NVPWindow::KMOD_ALT) != 0);
+  io.AddKeyEvent(ImGuiKey_ModSuper, (mods & NVPWindow::KMOD_SUPER) != 0);
 
-  ImGuiKey keyIndex = KeyToImGuiKey(button);
+  int keyIndex = KeyToImGuiKey(button);
   io.AddKeyEvent(keyIndex, action == NVPWindow::BUTTON_PRESS);
   return io.WantCaptureKeyboard;
 }
@@ -331,8 +330,11 @@ enum FontMode
 void Init(int width, int height, void* userData, FontMode fontmode = FONT_DEFAULT_SCALED);
 void Deinit();
 
+// some helpers making use of ImGui_ImplGlfw_ functions where appropriate
+void InitGLFW(GLFWwindow* window, int width, int height, void* userData, FontMode fontmode = FONT_DEFAULT_SCALED);
+void NewFrameGLFW();
+void DeinitGLFW();
 
-// begin - gl_vk_threaded_cadscene
 template <typename T>
 bool Clamped(bool changed, T* value, T min, T max)
 {
@@ -1207,94 +1209,66 @@ bool ImGuiH::Control::Custom(const std::string& label, TTooltip description, std
   return changed;
 }
 
-//--------------------------------------------------------------------------------------------------
-// This is a helper to create a nice property editor with ImGui, where the name of the property
-// is on the left, while all values are on the right.
+//////////////////////////////////////////////////////////////////////////
+// Property Editor like Helper
+// - Entries are always between Begin/End
+// - Entries are made of a 'property' and a 'value'
 //
-// To use:
-// - Call PropertyEditor::Begin() to start the section of the editor
-// - For each entry, use the same ImGui property in the lambda function
-//   Ex: PropertyEditor::Entry("My Prop", [&](){return ImGui::DragFloat(...);});
-// - An extra argument can be added, which will display the string as Tooltip
-// - Close the property by calling PropertyEditor::End()
+// There is one Entry with a string from both property and value,
+// the other one is a string for the property and a std::function for
+// the value. The last one can be implemented with a lambda, therefore
+// any Imgui widget can be used on the right side.
+//
+// Ex:
+// ImGuiH::PropertyEditor::Begin();
+// ImGuiH::PropertyEditor::Entry("Total Render GPU [ms]", "0.401");
+// ImGuiH::PropertyEditor::Entry("Vertex Size [MB]", "0");
+// ImGuiH::PropertyEditor::Entry("Attrib Size [MB]", "0");
+// ImGuiH::PropertyEditor::Entry("Custom widget",
+//                               [&] { return ImGui::DragFloat3("##tt", &helloVk.m_pushConstant.lightPosition.x); });
+// ImGuiH::PropertyEditor::End();
 //
 struct PropertyEditor
 {
   // Beginning the Property Editor
-  static void begin(ImGuiTableFlags flag = ImGuiTableFlags_BordersOuter | ImGuiTableFlags_Resizable)
+  static void Begin()
   {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
-    const bool table_valid = ImGui::BeginTable("split", 2, flag);
-    assert(table_valid);
+    ImGui::Columns(2);
+    ImGui::Separator();
   }
 
-  // Generic entry, the lambda function should return true if the widget changed
-  static bool entry(const std::string& property_name, const std::function<bool()>& content_fct, const std::string& tooltip = {})
+  // Generic entry, the lambda function should return if the widget changed
+  static bool Entry(const std::string& property_name, std::function<bool()> content_fct)
   {
-    ImGui::PushID(property_name.c_str());
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
     ImGui::AlignTextToFramePadding();
+    ImGui::SetNextItemWidth(-1);
     ImGui::Text("%s", property_name.c_str());
-    if(!tooltip.empty())
-      ImGuiH::tooltip(tooltip.c_str(), false, 0);
-    ImGui::TableNextColumn();
-    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::NextColumn();
+    ImGui::AlignTextToFramePadding();
+    ImGui::SetNextItemWidth(-1);
     bool result = content_fct();
-    if(!tooltip.empty())
-      ImGuiH::tooltip(tooltip.c_str());
-    ImGui::PopID();
+    ImGui::NextColumn();
     return result;  // returning if the widget changed
   }
 
   // Text specialization
-  static void entry(const std::string& property_name, const std::string& value)
+  static void Entry(const std::string& property_name, const std::string& value)
   {
-    entry(property_name, [&] {
+    Entry(property_name, [&] {
       ImGui::Text("%s", value.c_str());
       return false;  // dummy, no change
     });
   }
 
-
-  static bool treeNode(const std::string& name)
-  {
-    ImGui::TableNextRow();
-    ImGui::TableNextColumn();
-    ImGui::AlignTextToFramePadding();
-    return ImGui::TreeNodeEx(name.c_str(), ImGuiTreeNodeFlags_SpanFullWidth);
-  }
-  static void treePop() { ImGui::TreePop(); }
-
   // Ending the Editor
-  static void end()
+  static void End()
   {
-    ImGui::EndTable();
+    ImGui::Columns(1);
+    ImGui::Separator();
     ImGui::PopStyleVar();
   }
 };
-
-
-bool azimuthElevationSliders(nvmath::vec3f& direction, bool negative = true, bool yIsUp = true);
-
-// This allow to use the mouse wheel over a widget and change the "data" value by and
-// increment. The value can be clamp if min_val != max_val. 
-// Ex. ImGui::Combo("Value", &combo_item, ...);
-//     ImGuiH::hoverScrolling(combo_item, 0, 5); // Scroll the item of the combo
-template <typename T>
-bool hoverScrolling(T& data, T min_val = T(0), T max_val = T(0), float inc = 1.0F)
-{
-  ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
-  if(ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0.0F)
-  {
-    data += T(ImGui::GetIO().MouseWheel * inc);
-    if(min_val != max_val)
-      data = std::max(std::min(data, max_val), min_val);
-    return true;
-  }
-  return false;
-}
-
 
 }  // namespace ImGuiH
 

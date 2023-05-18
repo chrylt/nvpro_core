@@ -31,8 +31,6 @@
 
 namespace nvvk {
 
-// Would be used in Context::debugMessengerCallback.
-#if 0
 static std::string ObjectTypeToString(VkObjectType value)
 {
   switch(value)
@@ -119,7 +117,6 @@ static std::string ObjectTypeToString(VkObjectType value)
       return "invalid";
   }
 }
-#endif
 
 // Define a callback to capture the messages
 VKAPI_ATTR VkBool32 VKAPI_CALL Context::debugMessengerCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -229,6 +226,8 @@ bool Context::initInstance(const ContextCreateInfo& info)
 
   m_apiMajor = info.apiMajor;
   m_apiMinor = info.apiMinor;
+
+  uint32_t count = 0;
 
   if(info.verboseUsed)
   {
@@ -392,7 +391,7 @@ nvvk::Context::QueueScore Context::removeQueueListItem(QueueScoreList& list, VkQ
     }
   }
 
-  return {};
+  return QueueScore();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -485,6 +484,7 @@ bool Context::initDevice(uint32_t deviceIndex, const ContextCreateInfo& info)
   deviceCreateInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
   deviceCreateInfo.pQueueCreateInfos    = queueCreateInfos.data();
 
+
   //////////////////////////////////////////////////////////////////////////
   // version features and physical device extensions
 
@@ -499,14 +499,14 @@ bool Context::initDevice(uint32_t deviceIndex, const ContextCreateInfo& info)
   {
     features2.pNext = &features11old.multiview;
   }
-
+  
   if(info.apiMajor == 1 && info.apiMinor >= 2)
   {
     features2.pNext                 = &m_physicalInfo.features11;
     m_physicalInfo.features11.pNext = &m_physicalInfo.features12;
     m_physicalInfo.features12.pNext = nullptr;
   }
-
+  
   if(info.apiMajor == 1 && info.apiMinor >= 3)
   {
     m_physicalInfo.features12.pNext = &m_physicalInfo.features13;
@@ -558,7 +558,7 @@ bool Context::initDevice(uint32_t deviceIndex, const ContextCreateInfo& info)
       header->pNext = i < featureStructs.size() - 1 ? featureStructs[i + 1] : nullptr;
     }
 
-    // append to the end of current feature2 struct chain
+    // append to the end of current feature2 struct
     ExtensionHeader* lastCoreFeature = (ExtensionHeader*)&features2;
     while(lastCoreFeature->pNext != nullptr)
     {
@@ -570,18 +570,7 @@ bool Context::initDevice(uint32_t deviceIndex, const ContextCreateInfo& info)
     vkGetPhysicalDeviceFeatures2(m_physicalDevice, &features2);
   }
 
-  // run user callback to disable features
-  if(info.fnDisableFeatures)
-  {
-    ExtensionHeader* featurePtr = (ExtensionHeader*)&features2;
-    while(featurePtr)
-    {
-      info.fnDisableFeatures(featurePtr->sType, featurePtr);
-      featurePtr = (ExtensionHeader*)featurePtr->pNext;
-    }
-  }
-
-  // disable this feature through info directly
+  // disable some features
   if(info.disableRobustBufferAccess)
   {
     features2.features.robustBufferAccess = VK_FALSE;
@@ -625,6 +614,16 @@ bool Context::initDevice(uint32_t deviceIndex, const ContextCreateInfo& info)
     deviceCreateInfo.pNext   = info.deviceCreateInfoExt;
   }
 
+  
+  /*
+  VkPhysicalDeviceHostQueryResetFeatures resetFeatures;
+  resetFeatures.sType          = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
+  resetFeatures.pNext          = &deviceCreateInfo.pNext;
+  resetFeatures.hostQueryReset = VK_TRUE;
+
+
+  deviceCreateInfo.pNext = &resetFeatures;*/
+
   VkResult result = vkCreateDevice(m_physicalDevice, &deviceCreateInfo, nullptr, &m_device);
 
   if(deviceCreateChain)
@@ -646,14 +645,14 @@ bool Context::initDevice(uint32_t deviceIndex, const ContextCreateInfo& info)
   if(hasDeviceExtension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)
      || hasDeviceExtension(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME))
   {
-    LOGW(
+    LOGI(
         "\n-------------------------------------------------------------------"
         "\nWARNING: Aftermath extensions enabled. This may affect performance."
         "\n-------------------------------------------------------------------\n\n");
   }
   else if(isAftermathAvailable() && info.enableAftermath)
   {
-    LOGW(
+    LOGI(
         "\n--------------------------------------------------------------"
         "\nWARNING: Attempted to enable Aftermath extensions, but failed."
         "\n" VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME " or\n " VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME
@@ -974,8 +973,8 @@ void Context::initPhysicalInfo(PhysicalDeviceInfo& info, VkPhysicalDevice physic
 
   if(versionMajor == 1 && versionMinor >= 3)
   {
-    info.features12.pNext   = &info.features13;
-    info.features13.pNext   = nullptr;
+    info.features12.pNext = &info.features13;
+    info.features13.pNext = nullptr;
     info.properties12.pNext = &info.properties13;
     info.properties13.pNext = nullptr;
   }
@@ -1014,7 +1013,7 @@ void Context::initDebugUtils()
                                             | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;     // Non-optimal use
     dbg_messenger_create_info.pfnUserCallback = debugMessengerCallback;
     dbg_messenger_create_info.pUserData       = this;
-    NVVK_CHECK(m_createDebugUtilsMessengerEXT(m_instance, &dbg_messenger_create_info, nullptr, &m_dbgMessenger));
+    VkResult result = m_createDebugUtilsMessengerEXT(m_instance, &dbg_messenger_create_info, nullptr, &m_dbgMessenger);
   }
 }
 
@@ -1071,7 +1070,7 @@ std::vector<uint32_t> Context::getCompatibleDevices(const ContextCreateInfo& inf
     }
     else if(info.verboseCompatibleDevices)
     {
-      LOGI("Skipping physical device %s\n", props.deviceName);
+      LOGW("Skipping physical device %s\n", props.deviceName);
     }
   }
   if(info.verboseCompatibleDevices)
@@ -1083,7 +1082,7 @@ std::vector<uint32_t> Context::getCompatibleDevices(const ContextCreateInfo& inf
     }
     else
     {
-      LOGE("OMG... NONE !!\n");
+      LOGI("OMG... NONE !!\n");
     }
   }
 

@@ -126,10 +126,7 @@ public:
   void   setCamera(Camera camera, bool instantSet = true);
 
   // Retrieve the position, interest and up vector of the camera
-  void          getLookat(nvmath::vec3f& eye, nvmath::vec3f& center, nvmath::vec3f& up) const;
-  nvmath::vec3f getEye() const { return m_current.eye; }
-  nvmath::vec3f getCenter() const { return m_current.ctr; }
-  nvmath::vec3f getUp() const { return m_current.up; }
+  void getLookat(nvmath::vec3f& eye, nvmath::vec3f& center, nvmath::vec3f& up) const;
 
   // Set the manipulator mode, from Examiner, to walk, to fly, ...
   void setMode(Modes mode) { m_mode = mode; }
@@ -189,7 +186,7 @@ public:
 protected:
   CameraManipulator();
 
-private:
+public:
   // Update the internal matrix.
   void update() { m_matrix = nvmath::look_at(m_current.eye, m_current.ctr, m_current.up); }
 
@@ -216,7 +213,7 @@ protected:
   // Animation
   std::array<nvmath::vec3f, 3> m_bezier;
   double                       m_start_time = 0;
-  double                       m_duration   = 0.5;
+  double                       m_duration   = 100;
   bool                         m_anim_done{true};
   nvmath::vec3f                m_key_vec{0, 0, 0};
 
@@ -225,7 +222,7 @@ protected:
   int m_height = 1;
 
   // Other
-  float         m_speed      = 3.f;
+  float         m_speed      = 0.75f;
   nvmath::vec2f m_mouse      = nvmath::vec2f(0.f, 0.f);
   nvmath::vec2f m_clipPlanes = nvmath::vec2f(0.001f, 100000000.f);
 

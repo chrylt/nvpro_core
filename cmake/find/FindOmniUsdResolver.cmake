@@ -13,24 +13,11 @@ elseif (UNIX)
   set(USE_PACKMAN_COMMAND "packman")
 endif()
 
-if ("nopy" IN_LIST OmniUsdResolver_FIND_COMPONENTS)
-  set(INCLUDE_PYTHON 0)
-  set(OmniUsdResolver_PYTHON_VERSION "nopy")
-else()
-  set(INCLUDE_PYTHON 1)
-  set(OmniUsdResolver_PYTHON_VERSION "py37")
-endif()
-
-
 message(STATUS "Pulling OMNI_USD_RESOLVER dependencies...")
 message(STATUS "    Platform: ${OMNI_USD_RESOLVER_PACKMAN_PLATFORM}")
 
-file(MAKE_DIRECTORY "${BASE_DIRECTORY}/nvpro_core/OV/downloaded")
-configure_file(
-  "${BASE_DIRECTORY}/nvpro_core/OV/omniusdresolver-deps.packman.xml"
-  "${BASE_DIRECTORY}/nvpro_core/OV/downloaded/omniusdresolver-deps.packman.xml"
-  @ONLY
-)
+file(COPY "${BASE_DIRECTORY}/nvpro_core/OV/omniusdresolver-deps.packman.xml"
+        DESTINATION "${BASE_DIRECTORY}/nvpro_core/OV/downloaded")
 
 execute_process(COMMAND "${BASE_DIRECTORY}/nvpro_core/OV/packman/${USE_PACKMAN_COMMAND}" pull "${BASE_DIRECTORY}/nvpro_core/OV/downloaded/omniusdresolver-deps.packman.xml" -p ${OMNI_USD_RESOLVER_PACKMAN_PLATFORM}
                 WORKING_DIRECTORY "${BASE_DIRECTORY}/nvpro_core/OV/downloaded"

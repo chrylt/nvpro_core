@@ -83,8 +83,8 @@ void CameraManipulator::updateAnim()
   // Key animation
   if(m_key_vec != nvmath::vec3f(0, 0, 0))
   {
-    m_current.eye += m_key_vec * elapse;
-    m_current.ctr += m_key_vec * elapse;
+    m_current.eye += (m_key_vec * 0.5f) * elapse / m_speed;
+    m_current.ctr += (m_key_vec * 0.5f) * elapse / m_speed;
     update();
     m_start_time = getSystemTime();
     return;
@@ -557,7 +557,7 @@ void CameraManipulator::fit(const nvmath::vec3f& boxMin, const nvmath::vec3f& bo
     {
       nvmath::vec3f vct(i & 1 ? boxHalfSize.x : -boxHalfSize.x, i & 2 ? boxHalfSize.y : -boxHalfSize.y,
                         i & 4 ? boxHalfSize.z : -boxHalfSize.z);
-      vct = nvmath::vec3f(mView * vct);
+      vct = mView * vct;
 
       if(vct.z < 0)  // Take only points in front of the center
       {

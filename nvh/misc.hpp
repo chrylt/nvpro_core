@@ -56,14 +56,8 @@ inline std::string stringFormat(const char* msg, ...)
   for(int i = 0; i < 2; ++i)
   {
     va_start(list, msg);
-    int charsNeeded = vsnprintf(&str[0], str.size(), msg, list);  // charsNeeded doesn't count \0
+    size_t charsNeeded = static_cast<size_t>(vsnprintf(str.data(), str.size(), msg, list));  // charsNeeded doesn't count \0
     va_end(list);
-
-    if (charsNeeded < 0)
-    {
-      assert(!"encoding error");
-      return std::string();
-    }
 
     if(charsNeeded < str.size())
     {  // Not <= due to \0 terminator (which we trim out of std::string)

@@ -48,6 +48,7 @@ _optional_package_Freeimage()
 _optional_package_Optix()
 _optional_package_Cuda()
 _optional_package_NVToolsExt()
+_optional_package_Sockets()
 
 # process the rest of some cmake code that needs to be done after the packages
 _process_shared_cmake_code()
@@ -79,37 +80,12 @@ if(USING_VULKANSDK)
   # nsight_aftermath_vk.cpp into the projects automatically
   list(REMOVE_ITEM NVHELPERSVK_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/nvvk/nsight_aftermath_vk.cpp)
 
-  # Adding compile_glsl 
-  if(EXISTS ${BASE_DIRECTORY}/nvpro_core/cmake/utilities.cmake)
-    include(${BASE_DIRECTORY}/nvpro_core/cmake/utilities.cmake)
-  endif()
-
-  # Vulkan-high-level helpers
-  file(GLOB NVVKHL_SOURCE nvvkhl/*.cpp nvvkhl/*.hpp nvvkl/*.inl nvvkh;/*.h)
-  set(SHD_DIR nvvkhl/shaders)
-  file(GLOB SHD_HDR  ${SHD_DIR}/*.glsl ${SHD_DIR}/*.h)
-  file(GLOB SHD_SRC ${SHD_DIR}/*.vert ${SHD_DIR}/*.frag ${SHD_DIR}/*.comp ${SHD_DIR}/*.rgen ${SHD_DIR}/*.rchit ${SHD_DIR}/*.rmiss)
-  # Compiling shaders to SPIR-V header
-  compile_glsl(
-      SOURCE_FILES ${SHD_SRC}
-      HEADER_FILES ${SHD_HDR}
-      DST "${CMAKE_CURRENT_SOURCE_DIR}/_autogen" 
-      VULKAN_TARGET "vulkan1.2"
-      HEADER ON
-      DEPENDENCY ${VULKAN_BUILD_DEPENDENCIES}
-      FLAGS "-I${SHD_DIR}" "-I${CMAKE_CURRENT_SOURCE_DIR}" -g
-      )
-
   if (NOT TARGET vma)
     list(REMOVE_ITEM NVHELPERSVK_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/nvvk/memallocator_vma_vk.hpp)
     list(REMOVE_ITEM NVHELPERSVK_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/nvvk/memallocator_vma_vk.inl)
-    list(REMOVE_ITEM NVVKHL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/nvvkhl/alloc_vma.hpp)
   endif()
   
   source_group("nvvk" FILES ${NVHELPERSVK_SOURCE})
-  source_group("nvvkhl" FILES ${NVVKHL_SOURCE})
-  source_group("nvvkhl/shaders" FILES ${GLSL_SOURCES} ${GLSL_HEADERS})
-  set(NVVKHL_SHADERS ${GLSL_SOURCES} ${GLSL_HEADERS})
 
   string(CONCAT library_name ${library_name} "_vk")
   
@@ -124,8 +100,6 @@ endif()
 
 if(USING_IMGUI)
   set(IMGUI_SOURCE 
-      imgui/imgui_axis.cpp  
-      imgui/imgui_axis.hpp
       imgui/imgui_camera_widget.cpp 
       imgui/imgui_camera_widget.h 
       imgui/imgui_helper.cpp
@@ -141,26 +115,21 @@ if(USING_IMGUI)
     list(REMOVE_ITEM IMGUI_SOURCE imgui/imgui_camera_widget.cpp)
   endif()
 
-  # pickup our own backend directory
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/imgui ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends)
+  include_directories(${IMGUI_DIR} ${IMGUI_DIR}/backends)
   
   if(USING_OPENGL)
     list(APPEND IMGUI_SOURCE 
-         ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends/imgui_impl_gl.cpp
-         ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends/imgui_impl_gl.h
+         imgui/backends/imgui_impl_gl.cpp
+         imgui/backends/imgui_impl_gl.h
          )
   endif() 
  
   if(USING_VULKANSDK)
-    # replaced with our own copy
-    list(REMOVE_ITEM IMGUI_SOURCE ${IMGUI_DIR}/imgui/backends/imgui_impl_vulkan.cpp)
-    list(REMOVE_ITEM IMGUI_SOURCE ${IMGUI_DIR}/imgui/backends/imgui_impl_vulkan.h)
-
     list(APPEND IMGUI_SOURCE 
-         ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends/imgui_vk_extra.cpp 
-         ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends/imgui_vk_extra.h
-         ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends/imgui_impl_vulkan.cpp 
-         ${CMAKE_CURRENT_SOURCE_DIR}/imgui/backends/imgui_impl_vulkan.h)
+         imgui/backends/imgui_vk_extra.cpp 
+         imgui/backends/imgui_vk_extra.h
+         imgui/backends/imgui_impl_vulkan.cpp 
+         imgui/backends/imgui_impl_vulkan.h)
   endif()
  
   if(USING_DIRECTX12)
@@ -217,8 +186,6 @@ add_library(nvpro_core STATIC
   ${NVPWINDOW_SOURCE}
   ${OPENGL_FILES}
   ${NVHELPERSVK_SOURCE}
-  ${NVVKHL_SOURCE}
-  ${NVVKHL_SHADERS}
   ${NVHELPERSGL_SOURCE}
   ${NVHELPERSDX12_SOURCE}
   ${PACKAGE_SOURCE_FILES}
@@ -233,11 +200,7 @@ if((${CMAKE_VERSION} VERSION_GREATER "3.16.0") OR (${CMAKE_VERSION} VERSION_EQUA
   )
 endif()
 
-# Add X11 for screenshot support on linux
-if(UNIX)
-  find_package(X11 REQUIRED)
-  LIST(APPEND PLATFORM_LIBRARIES ${X11_LIBRARIES})
-endif()
+
 
 target_link_libraries(nvpro_core
   ${PLATFORM_LIBRARIES} 

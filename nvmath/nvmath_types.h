@@ -96,8 +96,8 @@ struct vector2
   {
   }
   vector2(T x)
-      : x(x)
-      , y(x)
+      : x(T(x))
+      , y(T(x))
   {
   }
   template <typename T0, typename T1>
@@ -112,15 +112,8 @@ struct vector2
   {
   }
   vector2(const vector2& u) = default;
-  explicit vector2(const vector3<T>&);
-  explicit vector2(const vector4<T>&);
-
-  template <typename T2>
-  explicit vector2(const vector2<T2>& u)
-      : x(static_cast<T>(u.x))
-      , y(static_cast<T>(u.y))
-  {
-  }
+  vector2(const vector3<T>&);
+  vector2(const vector4<T>&);
 
   bool operator==(const vector2& u) const { return (u.x == x && u.y == y) ? true : false; }
 
@@ -193,9 +186,9 @@ struct vector3
   {
   }
   vector3(T x)
-      : x(x)
-      , y(x)
-      , z(x)
+      : x(T(x))
+      , y(T(x))
+      , z(T(x))
   {
   }
   template <typename T0, typename T1, typename T2>
@@ -211,7 +204,7 @@ struct vector3
       , z(xyz[2])
   {
   }
-  explicit vector3(const vector2<T>& u)
+  vector3(const vector2<T>& u)
       : x(u.x)
       , y(u.y)
       , z(1.0f)
@@ -227,13 +220,13 @@ struct vector3
 
   template <typename T2>
   explicit vector3(const vector3<T2>& u)
-      : x(static_cast<T>(u.x))
-      , y(static_cast<T>(u.y))
-      , z(static_cast<T>(u.z))
+      : x(u.x)
+      , y(u.y)
+      , z(u.z)
   {
   }
 
-  explicit vector3(const vector4<T>&);
+  vector3(const vector4<T>&);
 
   bool operator==(const vector3<T>& u) const { return (u.x == x && u.y == y && u.z == z) ? true : false; }
 
@@ -365,10 +358,10 @@ struct vector4
   {
   }
   vector4(T x)
-      : x(x)
-      , y(x)
-      , z(x)
-      , w(x)
+      : x(T(x))
+      , y(T(x))
+      , z(T(x))
+      , w(T(x))
   {
   }
   template <typename T0, typename T1, typename T2, typename T3>
@@ -386,14 +379,14 @@ struct vector4
       , w(xyzw[3])
   {
   }
-  explicit vector4(const vector2<T>& u)
+  vector4(const vector2<T>& u)
       : x(u.x)
       , y(u.y)
       , z(0.0f)
       , w(1.0f)
   {
   }
-  explicit vector4(const vector2<T>& u, const T zz)
+  vector4(const vector2<T>& u, const T zz)
       : x(u.x)
       , y(u.y)
       , z(zz)
@@ -407,7 +400,7 @@ struct vector4
       , w(ww)
   {
   }
-  explicit vector4(const vector3<T>& u)
+  vector4(const vector3<T>& u)
       : x(u.x)
       , y(u.y)
       , z(u.z)
@@ -422,15 +415,6 @@ struct vector4
   {
   }
   vector4(const vector4<T>& u) = default;
-
-  template <typename T2>
-  explicit vector4(const vector4<T2>& u)
-      : x(static_cast<T>(u.x))
-      , y(static_cast<T>(u.y))
-      , z(static_cast<T>(u.z))
-      , w(static_cast<T>(u.w))
-  {
-  }
 
   bool operator==(const vector4<T>& u) const { return (u.x == x && u.y == y && u.z == z && u.w == w) ? true : false; }
 
@@ -709,7 +693,7 @@ struct matrix4
   matrix4(int one) { identity(); }
 
   matrix4(const T* array) { memcpy(mat_array, array, sizeof(T) * 16); }
-  explicit matrix4(const matrix3<T>& M)
+  matrix4(const matrix3<T>& M)
   {
     memcpy(mat_array, M.mat_array, sizeof(T) * 3);
     mat_array[3] = 0.0;
@@ -971,7 +955,7 @@ public:
       : quaternion(0, 0, 0, 0)
   {
   }
-  explicit quaternion(T* q)
+  quaternion(T* q)
   {
     x = q[0];
     y = q[1];
@@ -988,9 +972,9 @@ public:
   }
   quaternion(const quaternion<T>& quaternion) = default;
   quaternion(const vector3<T>& axis, T angle);
-  explicit quaternion(const vector3<T>& eulerXYZ);  // From Euler
-  explicit quaternion(const matrix3<T>& rot);
-  explicit quaternion(const matrix4<T>& rot);
+  quaternion(const vector3<T>& eulerXYZ);  // From Euler
+  quaternion(const matrix3<T>& rot);
+  quaternion(const matrix4<T>& rot);
   quaternion<T>& operator=(const quaternion<T>& quaternion);
   quaternion<T>  operator-() { return quaternion<T>(-x, -y, -z, -w); }
   quaternion<T>  inverse();
@@ -1095,7 +1079,7 @@ struct plane : public vector4<T>
   //define plane from 3 coefficients: x*a + y*b + z*c + d = 0
   inline explicit plane(T a, T b, T c, T d, NormalizeInConstruction normalizePlane = yes);
 
-  vector3<T> normal() const { return vector3<T>(this->x, this->y, this->z); }
+  vector3<T> normal() const { return *this; }
   T          distanceFromOrigin() const { return -this->w; }
 
   plane operator-();
@@ -1127,28 +1111,6 @@ template <typename T>
 vector3<T> make_vec3(T const* const ptr);
 template <typename T>
 vector4<T> make_vec4(T const* const ptr);
-
-// clang-format off
-template<typename T> vector2<bool> isinf(const vector2<T>& v) { return {std::isinf(v.x), std::isinf(v.y)}; }
-template<typename T> vector3<bool> isinf(const vector3<T>& v) { return {std::isinf(v.x), std::isinf(v.y), std::isinf(v.z)}; }
-template<typename T> vector4<bool> isinf(const vector4<T>& v) { return {std::isinf(v.x), std::isinf(v.y), std::isinf(v.z), std::isinf(v.w)}; }
-template<typename T> vector2<bool> isnan(const vector2<T>& v) { return {std::isnan(v.x), std::isnan(v.y)}; }
-template<typename T> vector3<bool> isnan(const vector3<T>& v) { return {std::isnan(v.x), std::isnan(v.y), std::isnan(v.z)}; }
-template<typename T> vector4<bool> isnan(const vector4<T>& v) { return {std::isnan(v.x), std::isnan(v.y), std::isnan(v.z), std::isnan(v.w)}; }
-inline bool any(const vector2<bool>& v) { return v.x || v.y; }
-inline bool any(const vector3<bool>& v) { return v.x || v.y || v.z; }
-inline bool any(const vector4<bool>& v) { return v.x || v.y || v.z || v.w; }
-inline bool all(const vector2<bool>& v) { return v.x && v.y; }
-inline bool all(const vector3<bool>& v) { return v.x && v.y && v.z; }
-inline bool all(const vector4<bool>& v) { return v.x && v.y && v.z && v.w; }
-// clang-format on
-
-// Returns true if all components are in R. I.e. there are no inf or nan values.
-template <class Vector>
-bool isreal(const Vector& v)
-{
-  return !any(isinf(v)) && !any(isnan(v));
-}
 
 }  // namespace nvmath
 
